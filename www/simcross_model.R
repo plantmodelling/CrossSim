@@ -1,5 +1,11 @@
 
 
+
+
+
+
+# RUN MODEL -----
+
 simcross <- function(random,
                      num_cortex,
                      diam_cortex,
@@ -285,49 +291,136 @@ simcross <- function(random,
     arrange(id_cell, atan) %>% 
     filter(!duplicated(atan))
   
-  # 
-  # rs1 %>% filter(type == "xylem") %>% 
-  #   #  dplyr::group_by(id_layer) %>% 
-  #   # dplyr::mutate(id_cell = min(id_cell)) %>% 
-  #   ggplot() +
-  #   geom_polygon(aes(x, y, group=id_cell, fill=factor(id_cell)), colour="white") +
-  #   theme_classic() +
-  #   coord_fixed() +
-  #   theme(axis.line=element_blank(),
-  #         axis.text.x=element_blank(),
-  #         axis.text.y=element_blank(),
-  #         axis.ticks=element_blank(),
-  #         axis.title.x=element_blank(),
-  #         axis.title.y=element_blank())
+  # Reset theids of the cells to be continuous
+  ids <- data.frame(id_cell = unique(rs1$id_cell))
+  ids$new <- c(1:nrow(ids))
+  rs1 <- merge(rs1, ids, by="id_cell")
+  rs1$id_cell <- rs1$new
+  
+  all_cells <- merge(all_cells, ids, by="id_cell")
+  all_cells$id_cell <- all_cells$new
   
   
- # rs1 %>% 
- #    ggplot() +
- #    geom_polygon(aes(x, y, group=id_cell, fill=type), colour="white") +
- #    theme_classic() +
- #    coord_fixed() +
- #    theme(axis.line=element_blank(),
- #          axis.text.x=element_blank(),
- #          axis.text.y=element_blank(),
- #          axis.ticks=element_blank(),
- #          axis.title.x=element_blank(),
- #          axis.title.y=element_blank())
-  # 
-  # ggplot(nodes) +
-  #   geom_segment(aes(x1, y1, xend=x2, yend=y2, colour=type))+
-  #   geom_point(aes(x1, y1, colour=type))+
-  #   theme_classic() +
-  #   coord_fixed() +
-  #   theme(axis.line=element_blank(),
-  #         axis.text.x=element_blank(),
-  #         axis.text.y=element_blank(),
-  #         axis.ticks=element_blank(),
-  #         axis.title.x=element_blank(),
-  #         axis.title.y=element_blank())#+
-    #scale_fill_brewer(palette = "BrBG")
-
+  section <- data.frame(n_cells = nrow(all_cells),
+                        n_xylem = nrow(all_cells[all_cells$type == "xylem",]),
+                        n_phloem = nrow(all_cells[all_cells$type == "phloem",]),
+                        n_epidermis = nrow(all_cells[all_cells$type == "epidermis",]),
+                        n_endodermis = nrow(all_cells[all_cells$type == "endodermis",]),
+                        n_exodermis = nrow(all_cells[all_cells$type == "exodermis",]),
+                        n_pericycle = nrow(all_cells[all_cells$type == "pericycle",]),
+                        n_stele = nrow(all_cells[all_cells$type == "stele",]),
+                        n_cortex = nrow(all_cells[all_cells$type == "cortex",]),
+                        diameter = max(rs1$x) - min(rs1$x),
+                        diameter_stele = max(rs1$x[rs1$type == "stele"]) - min(rs1$x[rs1$type == "stele"]),
+                        thickness_cortex = max(rs1$x[rs1$type == "cortex" & rs1$angle > 0 & rs1$angle < 1]) - 
+                          min(rs1$x[rs1$type == "cortex" & rs1$angle > 0 & rs1$angle < 1]))
   
   
+  rs1$sorting <- c(1:nrow(rs1))
   
- return(list(cells = rs1, summary=all_cells))
+  nodes <- NULL
+  for(i in unique(rs1$id_cell)){
+    temp <-rs1[rs1$id_cell == i,] %>% 
+      mutate(xx = c(x[-1],x[1])) %>% 
+      mutate(yy = c(y[-1],y[1]))
+    nodes <- rbind(nodes, temp)
+  }
+  
+  nodes <- nodes %>% 
+    ungroup() %>% 
+    mutate(x1 = ifelse(x > xx, x, xx)) %>% 
+    mutate(x2 = ifelse(x < xx, x, xx)) %>% 
+    mutate(y1 = ifelse(y > yy, y, yy)) %>% 
+    mutate(y2 = ifelse(y < yy, y, yy)) %>% 
+    arrange(sorting)
+  
+  walls <- nodes[!duplicated(nodes[,c('x1', 'x2', 'y1', 'y2')]),] %>% 
+    select(c(x1, x2, y1, y2))
+  
+  walls$id_wall <- c(1:nrow(walls))
+  
+  nodes <- merge(nodes, walls, by=c("x1", "x2", "y1", "y2"))
+  nodes <- nodes %>% 
+    arrange(sorting)
+  
+ return(list(nodes = nodes, 
+             walls = walls, 
+             cells=all_cells, 
+             section = section))
 }
+
+
+
+
+# SAVE XML -----
+
+write_sim_xml <- function(sim = NULL, path = NULL){
+  
+  cellgroups <- data.frame(id_group = c(1, 2, 3, 4, 5, 13, 16),
+                       type = c("exodermis", "epidermis", "endodermis", "cortex", "stele", "xylem", "pericycle"))
+  
+  xml <- '<?xml version="1.0" encoding="utf-8"?>\n'
+  xml <- paste0(xml, '<crosssimdata>\n')
+  
+  # Metadata
+  xml <- paste0(xml, '\t<metadata>\n')
+  xml <- paste0(xml, '\t\t<parameters>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="num_cortex" value="',num_cortex,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="diam_cortex" value="',diam_cortex,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="size_stele" value="',size_stele,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="diam_stele" value="',diam_stele,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="proportion_aerenchyma" value="',proportion_aerenchyma/100,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="n_aerenchyma_files" value="',n_aerenchyma_files,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="n_xylem_files" value="',n_xylem_files,'"/>\n')
+  xml <- paste0(xml, '\t\t\t<parameter name="diam_xylem" value="',diam_xylem,'"/>\n')
+  xml <- paste0(xml, '\t\t</parameters>\n')
+  xml <- paste0(xml, '\t</metadata>\n')
+  
+
+  # Cells
+  xml <- paste0(xml, '\t<cells count="',nrow(sim$cells),'">\n')
+  sim$nodes <-merge(sim$nodes, cellgroups, by="type")
+  temp_wall <- ddply(sim$nodes, .(id_cell, id_group), summarise, walls = paste0('\t\t\t\t<wall id="', 
+                                                                                paste(id_wall-1, collapse='"/>\n\t\t\t\t<wall id="'),
+                                                                                '"/>\n'))
+  xml <- paste0(xml, paste0('\t\t<cell id="',temp_wall$id_cell-1, '" group="', temp_wall$id_group, '" truncated="false" >\n',
+            '\t\t\t<walls>\n', temp_wall$walls, '\t\t\t</walls>\n',
+            '\t\t</cell>\n', collapse=""))
+  xml <- paste0(xml, '\t</cells>\n')
+  
+
+  # Walls
+  xml <- paste0(xml, '\t<walls count="',nrow(sim$walls),'">\n')
+  xml <- paste0(xml,paste0('\t\t<wall id="',sim$walls$id_wall-1,'" group="0" edgewall="false" >\n',
+         '\t\t\t<points>\n',
+         '\t\t\t\t<point x="',sim$walls$x1,'" y="',sim$walls$y1,'"/>\n',
+         '\t\t\t\t<point x="',sim$walls$x2,'" y="',sim$walls$y2,'"/>\n',
+         '\t\t\t</points>\n',
+         '\t\t</wall>\n', collapse = ""))
+  xml <- paste0(xml, '\t</walls>\n')
+  
+  # Groups
+  xml <- paste0(xml, '\t<groups>\n')
+  xml <- paste0(xml, '\t\t<cellgroups>\n')
+  for(i in c(1:nrow(cellgroups))){
+    xml <- paste0(xml, '\t\t\t<group id="',cellgroups$id[i],'" name="',cellgroups$name[i],'" />\n')
+  }
+  xml <- paste0(xml, '\t\t</cellgroups>\n')
+  xml <- paste0(xml, '\t\t<wallgroups>\n')
+  xml <- paste0(xml, '\t\t\t<group id="0" name="unassigned" />\n')
+  xml <- paste0(xml, '\t\t</wallgroups>\n')
+  xml <- paste0(xml, '\t</groups>\n')
+  
+  xml <- paste0(xml, '</crosssimdata>')
+  
+  if(!is.null(path)){
+    cat(xml, file = path)
+    return(TRUE)
+  }else{
+    return(xml)
+  }
+  
+  
+}
+
+
