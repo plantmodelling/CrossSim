@@ -5,9 +5,9 @@ account: plantmodelling
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 298854
-bundleId: 1282254
+bundleId: 1355401
 url: https://plantmodelling.shinyapps.io/CrossSim/
-when: 1521717224.06592
+when: 1525427855.9156
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: .RData

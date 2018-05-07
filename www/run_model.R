@@ -35,6 +35,7 @@ write_sim_xml(sim, "~/Desktop/root.xml")
 
 ggplot(sim$nodes) + 
   geom_polygon(aes(x, y, group=id_cell, fill=type), colour="white") + 
+  geom_text(data=sim$cells, aes(x, y, label=id_cell-1), size=3) + 
   theme_classic() + 
   coord_fixed() +
   theme(axis.line=element_blank(),

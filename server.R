@@ -127,5 +127,15 @@ shinyServer(
     ) 
     
     
+    ############################################################
+    ### TABLE ------------
+    ############################################################  
+    
+    output$section_data <- renderTable({
+      if(is.null(dat$cell_data$section)){return()}
+      dat$cell_data$section
+    })    
+    
+    
   
 })
